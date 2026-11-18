@@ -38,6 +38,7 @@ export const injectCompressNudges = (
     prompts: RuntimePrompts,
     compressionPriorities?: CompressionPriorityMap,
     createAnchors = true,
+    suppressNudges = false,
 ): void => {
     if (compressPermission(state, config) === "deny") {
         return
@@ -49,6 +50,24 @@ export const injectCompressNudges = (
 
     if (!createAnchors) {
         applyAnchoredNudges(state, config, messages, prompts, compressionPriorities)
+        return
+    }
+
+    if (suppressNudges) {
+        // Background compression owns the decision for this session. Clear any anchors
+        // left from an earlier turn (including ones persisted by an older plugin build)
+        // and let applyAnchoredNudges remove their injected messages.
+        const cleared =
+            state.nudges.contextLimitAnchors.size > 0 ||
+            state.nudges.turnNudgeAnchors.size > 0 ||
+            state.nudges.iterationNudgeAnchors.size > 0
+        state.nudges.contextLimitAnchors.clear()
+        state.nudges.turnNudgeAnchors.clear()
+        state.nudges.iterationNudgeAnchors.clear()
+        applyAnchoredNudges(state, config, messages, prompts, compressionPriorities)
+        if (cleared) {
+            void saveSessionState(state, logger)
+        }
         return
     }
 

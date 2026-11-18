@@ -37,6 +37,18 @@ export const syncCompressionBlocks = (
     const orderedBlocks = Array.from(messagesState.blocksById.values()).sort(sortBlocksByCreation)
 
     for (const block of orderedBlocks) {
+        // Background compression has no compress call/message of its own. Older blocks
+        // stored an empty compressMessageId; migrate them to their anchor so they are
+        // not discarded as orphans on the next context hook.
+        if (
+            block.active &&
+            (!block.compressMessageId || !messageIds.has(block.compressMessageId)) &&
+            typeof block.anchorMessageId === "string" &&
+            messageIds.has(block.anchorMessageId)
+        ) {
+            block.compressMessageId = block.anchorMessageId
+        }
+
         const hasOriginMessage =
             typeof block.compressMessageId === "string" &&
             block.compressMessageId.length > 0 &&

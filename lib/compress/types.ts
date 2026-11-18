@@ -3,12 +3,21 @@ import type { Logger } from "../logger"
 import type { PromptStore } from "../prompts/store"
 import type { CompressionBlock, CompressionMode, SessionState, WithParts } from "../state"
 
+export interface PlannerRuntimeInput {
+    prompt: string
+    sessionID: string
+    state: SessionState
+}
+
+export type PlannerRuntime = (input: PlannerRuntimeInput) => Promise<string>
+
 export interface ToolContext {
     client: any
     state: SessionState
     logger: Logger
     config: PluginConfig
     prompts: PromptStore
+    planner?: PlannerRuntime
 }
 
 export interface CompressRangeEntry {
@@ -20,6 +29,7 @@ export interface CompressRangeEntry {
 export interface CompressRangeToolArgs {
     topic: string
     content: CompressRangeEntry[]
+    focus?: string
 }
 
 export interface CompressMessageEntry {
@@ -31,6 +41,7 @@ export interface CompressMessageEntry {
 export interface CompressMessageToolArgs {
     topic: string
     content: CompressMessageEntry[]
+    focus?: string
 }
 
 export interface BoundaryReference {
@@ -102,7 +113,7 @@ export interface CompressionStateInput {
     endId: string
     mode: CompressionMode
     runId: number
-    compressMessageId: string
+    compressMessageId?: string
     compressCallId?: string
     summaryTokens: number
 }

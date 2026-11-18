@@ -4,6 +4,27 @@ import { getConfig } from "../config"
 import { Logger } from "../logger"
 import { PromptStore } from "../prompts/store"
 import { createCompressMessageTool, createCompressRangeTool } from "../compress"
+import { compactionInfo, dropUnavailableVariant, resolvePlannerModel } from "../compress/planner"
+import {
+    backgroundCompressionEnabled,
+    backgroundCompressionStatus,
+    isBackgroundCompressionPlanCurrent,
+    startBackgroundCompression,
+    takeBackgroundCompressionPlan,
+    takeDueBackgroundCompression,
+} from "../compress/precompute"
+import { applyResolvedMessageCompression, applyResolvedRangeCompression } from "../compress/apply"
+import { activeCompressionSavings, effectiveContextTokens } from "../compress/estimate"
+import { buildSearchContext } from "../compress/search"
+import { resolveRanges, validateNonOverlapping } from "../compress/range-utils"
+import { resolveMessages } from "../compress/message-utils"
+import { finalizeSession } from "../compress/pipeline"
+import type {
+    CompressMessageEntry,
+    CompressRangeEntry,
+    PlannerRuntime,
+    ToolContext,
+} from "../compress/types"
 import { attachCompressionDuration } from "../compress/state"
 import { createCommandExecuteHandler, createSystemPromptHandler } from "../hooks"
 import {
@@ -13,6 +34,7 @@ import {
     saveSessionState,
     syncToolCache,
     type SessionState,
+    type WithParts,
 } from "../state"
 import { assignMessageRefs } from "../message-ids"
 import { applyPendingManualTrigger } from "../commands/manual"
@@ -26,6 +48,7 @@ import {
     stripHallucinations,
     syncCompressionBlocks,
 } from "../messages"
+import { isContextOverLimits, resolveBackgroundLeadTokens } from "../messages/inject/utils"
 import { countTokens } from "../token-utils"
 import { matchesGlob } from "../protected-patterns"
 import { history, project } from "./messages"
@@ -65,6 +88,7 @@ export async function setup(ctx: Plugin.Context) {
     const sessions = new Map<string, SessionState>()
     const queues = new Map<string, Promise<unknown>>()
     const limits = new Map<string, number>()
+    const modelVariants = new Map<string, Set<string>>()
     const aliases: Record<string, string> = {
         task: "subagent",
         bash: "shell",
@@ -175,8 +199,12 @@ export async function setup(ctx: Plugin.Context) {
 
     await ctx.model.transform((editor) => {
         limits.clear()
-        for (const model of editor.list())
-            limits.set(`${model.providerID}/${model.id}`, model.limit.context)
+        modelVariants.clear()
+        for (const model of editor.list()) {
+            const key = `${model.providerID}/${model.id}`
+            limits.set(key, model.limit.context)
+            modelVariants.set(key, new Set(model.variants.map((variant) => String(variant.id))))
+        }
     })
     for (const kind of ["context", "compaction"] as const)
         await ctx.session.hook(kind, (event) =>
@@ -191,6 +219,11 @@ export async function setup(ctx: Plugin.Context) {
                 }
                 if (state.compressPermission === "deny") delete event.tools?.compress
                 state.modelContextLimit = limits.get(`${event.model.providerID}/${event.model.id}`)
+                state.modelRef = {
+                    providerID: event.model.providerID,
+                    id: event.model.id,
+                    variant: event.model.variant,
+                }
                 state.systemPromptTokens = countTokens(
                     event.system.map((part) => part.text).join("\n"),
                 )
@@ -205,6 +238,24 @@ export async function setup(ctx: Plugin.Context) {
                 syncCompressionBlocks(state, logger, messages)
                 syncToolCache(state, config, logger, view.messages)
                 buildToolIdList(state, view.messages)
+
+                const modelKey = `${event.model.providerID}/${event.model.id}`
+                const beforePrune = isContextOverLimits(
+                    config,
+                    state,
+                    event.model.providerID,
+                    event.model.id,
+                    messages,
+                )
+                if (
+                    kind === "context" &&
+                    beforePrune.overMaxLimit &&
+                    state.compressPermission === "allow" &&
+                    !state.manualMode
+                ) {
+                    await applyBackgroundPlan(event.sessionID, state, messages, modelKey)
+                }
+
                 prune(state, logger, config, view.messages, view.summaryBase)
                 await injectExtendedSubAgentResults(
                     client,
@@ -215,6 +266,20 @@ export async function setup(ctx: Plugin.Context) {
                 )
                 const priorities = buildPriorityMap(config, state, view.messages)
                 prompts.reload()
+                const backgroundStatus = backgroundCompressionStatus(event.sessionID).status
+                // A restarted session has no in-memory plan yet (status "idle"), so the
+                // first turn after a restart would otherwise receive the over-max nudge
+                // and plan in the main session. The idle hook starts a plan instead.
+                const canPlanInBackground =
+                    backgroundCompressionEnabled(config) &&
+                    state.compressPermission === "allow" &&
+                    !state.manualMode &&
+                    (!state.isSubAgent || config.experimental.allowSubAgents)
+                const suppressNudges =
+                    kind === "context" &&
+                    (backgroundStatus === "running" ||
+                        backgroundStatus === "ready" ||
+                        (backgroundStatus === "idle" && canPlanInBackground))
                 injectCompressNudges(
                     state,
                     config,
@@ -223,8 +288,40 @@ export async function setup(ctx: Plugin.Context) {
                     prompts.getRuntimePrompts(),
                     priorities,
                     kind === "context",
+                    suppressNudges,
                 )
                 injectMessageIds(state, config, view.messages, priorities)
+
+                if (kind === "context") {
+                    const usage = isContextOverLimits(
+                        config,
+                        state,
+                        event.model.providerID,
+                        event.model.id,
+                        view.messages,
+                    )
+                    const lead = resolveBackgroundLeadTokens(
+                        config.compress.background.lead,
+                        usage.baseMaxContextLimit,
+                    )
+                    if (
+                        usage.baseMaxContextLimit !== undefined &&
+                        usage.currentTokens >= usage.baseMaxContextLimit - (lead ?? 0)
+                    ) {
+                        // Do not depend on the idle hook: it may not run for this session
+                        // (or may fail to load it), which previously left the session
+                        // over budget with nudges suppressed and no plan started.
+                        scheduleBackgroundCompression(
+                            state,
+                            event.sessionID,
+                            messages,
+                            buildSearchContext(state, messages),
+                            modelKey,
+                            usage.currentTokens,
+                        )
+                    }
+                }
+
                 applyPendingManualTrigger(state, view.messages, logger)
                 event.messages = view.restore()
                 const system = { system: event.system.map((part) => part.text) }
@@ -249,11 +346,243 @@ export async function setup(ctx: Plugin.Context) {
             }),
         )
 
+    async function applyBackgroundPlan(
+        sessionID: string,
+        state: SessionState,
+        messages: WithParts[],
+        modelKey: string | undefined,
+    ): Promise<boolean> {
+        const plan = takeBackgroundCompressionPlan(sessionID)
+        if (!plan) return false
+        if (!isBackgroundCompressionPlanCurrent(plan, messages, modelKey)) {
+            logger.info("Discarded stale background compression plan", { sessionID })
+            return false
+        }
+        try {
+            const compression = compressionContext(state)
+            const searchContext = buildSearchContext(state, messages)
+            let notifications
+            if (plan.mode === "range") {
+                const resolved = resolveRanges(
+                    {
+                        topic: plan.topic,
+                        content: plan.entries as CompressRangeEntry[],
+                    },
+                    searchContext,
+                    state,
+                )
+                validateNonOverlapping(resolved)
+                ;({ notifications } = await applyResolvedRangeCompression(
+                    compression,
+                    searchContext,
+                    plan.topic,
+                    resolved,
+                    {},
+                ))
+            } else {
+                const resolved = resolveMessages(
+                    {
+                        topic: plan.topic,
+                        content: plan.entries as CompressMessageEntry[],
+                    },
+                    searchContext,
+                    state,
+                    config,
+                )
+                if (resolved.plans.length === 0) {
+                    throw new Error("Background compression plan has no resolvable messages")
+                }
+                ;({ notifications } = await applyResolvedMessageCompression(
+                    compression,
+                    searchContext,
+                    plan.topic,
+                    resolved.plans,
+                    {},
+                ))
+            }
+            await finalizeSession(
+                compression,
+                {
+                    sessionID,
+                    ask: async () => {},
+                    metadata: () => {},
+                },
+                messages,
+                notifications,
+                plan.topic,
+            )
+            logger.info("Applied background compression plan", {
+                sessionID,
+                mode: plan.mode,
+                ranges: plan.entries?.length ?? 0,
+            })
+            return true
+        } catch (cause) {
+            logger.warn("Discarded background compression plan", {
+                sessionID,
+                error: cause instanceof Error ? cause.message : String(cause),
+            })
+            return false
+        }
+    }
+
+    // Starts planning just after the current context hook returns, so the request is
+    // already on its way while the planner runs (providers accept concurrent requests).
+    function scheduleBackgroundCompression(
+        state: SessionState,
+        sessionID: string,
+        messages: WithParts[],
+        searchContext: ReturnType<typeof buildSearchContext>,
+        modelKey: string | undefined,
+        currentTokens: number,
+    ): void {
+        setTimeout(() => {
+            startBackgroundCompression({
+                ctx: compressionContext(state),
+                sessionID,
+                messages,
+                searchContext,
+                modelKey,
+                currentTokens,
+                onReady: () => {
+                    void serial(sessionID, () => applyReadyBackgroundCompression(sessionID))
+                },
+            })
+        }, 250)
+    }
+
+    // Applies a plan that finished while the session was idle. This keeps the next
+    // request from paying for compression inside its context hook.
+    async function applyReadyBackgroundCompression(sessionID: string): Promise<void> {
+        if (backgroundCompressionStatus(sessionID).status !== "ready") return
+        let loaded
+        try {
+            loaded = await load(sessionID)
+        } catch {
+            return
+        }
+        const { state, messages } = loaded
+        if (state.compressPermission !== "allow" || state.manualMode) return
+        if (state.isSubAgent && !config.experimental.allowSubAgents) return
+        const providerID = state.modelRef?.providerID
+        const modelID = state.modelRef?.id
+        await applyBackgroundPlan(
+            sessionID,
+            state,
+            messages,
+            providerID && modelID ? `${providerID}/${modelID}` : undefined,
+        )
+    }
+
+    // Runs while the session is idle, so a ready plan is applied before the next request
+    // instead of synchronously inside its context hook.
+    async function runIdleBackgroundCompression(sessionID: string): Promise<void> {
+        const due = takeDueBackgroundCompression(sessionID)
+        // A restarted session can already be over the limit without ever having marked a
+        // plan due, so inspect over-limit sessions instead of bailing out here.
+        if (
+            !due &&
+            backgroundCompressionStatus(sessionID).status === "idle" &&
+            !backgroundCompressionEnabled(config)
+        ) {
+            return
+        }
+
+        let loaded
+        try {
+            loaded = await load(sessionID)
+        } catch {
+            return
+        }
+        const { state, messages } = loaded
+        if (state.compressPermission !== "allow" || state.manualMode) return
+        if (state.isSubAgent && !config.experimental.allowSubAgents) return
+
+        const providerID = state.modelRef?.providerID
+        const modelID = state.modelRef?.id
+        const modelKey = providerID && modelID ? `${providerID}/${modelID}` : undefined
+        const usage = isContextOverLimits(config, state, providerID, modelID, messages)
+
+        const overBaseMax =
+            usage.baseMaxContextLimit !== undefined &&
+            usage.currentTokens > usage.baseMaxContextLimit
+        if (usage.overMaxLimit || overBaseMax) {
+            if (await applyBackgroundPlan(sessionID, state, messages, modelKey)) return
+            // Over-limit sessions are past the lead window by definition. Start planning
+            // anyway so a session that was already over the limit (for example after a
+            // restart, when in-memory plans are gone) can still compress in the background.
+            startBackgroundCompression({
+                ctx: compressionContext(state),
+                sessionID,
+                messages,
+                searchContext: buildSearchContext(state, messages),
+                modelKey,
+                currentTokens: usage.currentTokens,
+                onReady: () => {
+                    void serial(sessionID, () => applyReadyBackgroundCompression(sessionID))
+                },
+            })
+            return
+        }
+        if (!due || usage.baseMaxContextLimit === undefined) return
+
+        const lead = resolveBackgroundLeadTokens(
+            config.compress.background.lead,
+            usage.baseMaxContextLimit,
+        )
+        if (lead === undefined) return
+        if (usage.currentTokens < usage.baseMaxContextLimit - lead) return
+        startBackgroundCompression(due)
+    }
+
+    // OpenCode runs model requests from the context hook. Starting the planner there made
+    // it compete with (and on single-slot providers delay) the step's own request, so the
+    // planner starts only once the turn's model work has finished.
+    const idleSession = ctx.session as typeof ctx.session & {
+        hook(
+            name: "experimental.idle",
+            callback: (event: { sessionID: string }) => void,
+        ): Promise<unknown>
+    }
+    await idleSession.hook("experimental.idle", (event) => {
+        // Serialize with context hooks so state cannot change under a request.
+        void serial(event.sessionID, () => runIdleBackgroundCompression(event.sessionID))
+    })
+
+    const planner: PlannerRuntime = async ({ prompt, state: plannerState }) => {
+        const resolved = resolvePlannerModel(config, plannerState)
+        if (!resolved) {
+            throw new Error(
+                "DCP compression planner could not resolve a model. Configure compress.planner.model or re-run compression from a model request.",
+            )
+        }
+        const key = `${resolved.providerID}/${resolved.id}`
+        const model = dropUnavailableVariant(resolved, modelVariants.get(key))
+        if (resolved.variant && !model.variant) {
+            logger.warn("Planner model variant is unavailable; using the default", {
+                providerID: resolved.providerID,
+                modelID: resolved.id,
+                variant: resolved.variant,
+            })
+        }
+        const { text } = await ctx.generate.text({ prompt, model })
+        return text
+    }
+
+    const compressionContext = (state: SessionState): ToolContext => ({
+        client,
+        state,
+        logger,
+        config,
+        prompts,
+        planner,
+    })
+
     if (config.compress.permission !== "deny") {
         const define = (state: SessionState): ToolDefinition =>
             (config.compress.mode === "message"
                 ? createCompressMessageTool
-                : createCompressRangeTool)({ client, state, logger, config, prompts })
+                : createCompressRangeTool)(compressionContext(state))
         const definition = define(createSessionState("compact"))
         await ctx.tool.transform((editor) =>
             editor.add({
@@ -367,12 +696,38 @@ export async function setup(ctx: Plugin.Context) {
             serial(sessionID, async () => {
                 const { state, messages } = await load(sessionID)
                 syncCompressionBlocks(state, logger, messages)
+                const context = analyzeContextTokens(state, messages)
+                const effectiveTokens = effectiveContextTokens(context.total, state, messages)
+                const savedTokens = activeCompressionSavings(state)
+                const usage = isContextOverLimits(
+                    config,
+                    state,
+                    state.modelRef?.providerID,
+                    state.modelRef?.id,
+                    messages,
+                )
+                const backgroundLead = resolveBackgroundLeadTokens(
+                    config.compress.background.lead,
+                    usage.baseMaxContextLimit,
+                )
+                const startsAt =
+                    usage.baseMaxContextLimit !== undefined && backgroundLead !== undefined
+                        ? usage.baseMaxContextLimit - backgroundLead
+                        : undefined
                 return {
                     manualMode: !!state.manualMode,
                     canCompress:
                         state.compressPermission !== "deny" &&
                         (!state.isSubAgent || config.experimental.allowSubAgents),
-                    context: analyzeContextTokens(state, messages),
+                    compaction: compactionInfo(config),
+                    background: {
+                        ...backgroundCompressionStatus(sessionID),
+                        currentTokens: usage.currentTokens,
+                        ...(startsAt !== undefined ? { startsAt } : {}),
+                    },
+                    effectiveTokens,
+                    savedTokens,
+                    context,
                     stats: await buildStatsReport(state, logger),
                 }
             }),

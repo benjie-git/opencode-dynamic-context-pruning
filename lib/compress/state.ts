@@ -127,8 +127,11 @@ export function applyCompressionState(
         startId: input.startId,
         endId: input.endId,
         anchorMessageId,
-        compressMessageId: input.compressMessageId,
-        compressCallId: input.compressCallId,
+        // Background compression has no compress call/message of its own. Anchor the
+        // block to the selected message so `syncCompressionBlocks` does not treat it as
+        // an orphan and deactivate it on the next context hook.
+        compressMessageId: input.compressMessageId ?? anchorMessageId,
+        compressCallId: input.compressCallId ?? "",
         includedBlockIds: included,
         consumedBlockIds: consumed,
         parentBlockIds: [],

@@ -22,11 +22,31 @@ export interface Deduplication {
     protectedTools: string[]
 }
 
+export interface PlannerModelConfig {
+    /** Optional when only a thinking level is configured for the session's current model. */
+    providerID?: string
+    model?: string
+    variant?: string
+}
+
+export interface PlannerConfig {
+    enabled: boolean
+    model?: string | PlannerModelConfig
+    variant?: string
+}
+
+export interface BackgroundCompressionConfig {
+    enabled: boolean
+    lead: number | `${number}%`
+}
+
 export interface CompressConfig {
     mode: CompressMode
     permission: Permission
     showCompression: boolean
     summaryBuffer: boolean
+    planner?: PlannerConfig
+    background: BackgroundCompressionConfig
     maxContextLimit: number | `${number}%`
     minContextLimit: number | `${number}%`
     modelMaxLimits?: Record<string, number | `${number}%`>
@@ -126,6 +146,13 @@ export const VALID_CONFIG_KEYS = new Set([
     "compress.permission",
     "compress.showCompression",
     "compress.summaryBuffer",
+    "compress.planner",
+    "compress.planner.enabled",
+    "compress.planner.model",
+    "compress.planner.variant",
+    "compress.background",
+    "compress.background.enabled",
+    "compress.background.lead",
     "compress.maxContextLimit",
     "compress.minContextLimit",
     "compress.modelMaxLimits",
@@ -154,6 +181,11 @@ function getConfigKeyPaths(obj: Record<string, any>, prefix = ""): string[] {
 
         // model*Limits are dynamic maps keyed by providerID/modelID; do not recurse into arbitrary IDs.
         if (fullKey === "compress.modelMaxLimits" || fullKey === "compress.modelMinLimits") {
+            continue
+        }
+
+        // The planner model object is a typed model reference, not a config key namespace.
+        if (fullKey === "compress.planner.model") {
             continue
         }
 
@@ -382,6 +414,117 @@ export function validateConfigTypes(config: Record<string, any>): ValidationErro
                     expected: "boolean",
                     actual: typeof compress.summaryBuffer,
                 })
+            }
+
+            if (compress.planner !== undefined) {
+                if (
+                    typeof compress.planner !== "object" ||
+                    compress.planner === null ||
+                    Array.isArray(compress.planner)
+                ) {
+                    errors.push({
+                        key: "compress.planner",
+                        expected: "object",
+                        actual: JSON.stringify(compress.planner),
+                    })
+                } else {
+                    if (
+                        compress.planner.enabled !== undefined &&
+                        typeof compress.planner.enabled !== "boolean"
+                    ) {
+                        errors.push({
+                            key: "compress.planner.enabled",
+                            expected: "boolean",
+                            actual: typeof compress.planner.enabled,
+                        })
+                    }
+
+                    if (
+                        compress.planner.variant !== undefined &&
+                        typeof compress.planner.variant !== "string"
+                    ) {
+                        errors.push({
+                            key: "compress.planner.variant",
+                            expected: "string",
+                            actual: typeof compress.planner.variant,
+                        })
+                    }
+
+                    const plannerModel = compress.planner.model
+                    if (plannerModel !== undefined) {
+                        const validStringModel =
+                            typeof plannerModel === "string" &&
+                            /^[^/#\s]+\/[^#\s]+(?:#[^#\s]+)?$/.test(plannerModel)
+                        const validObjectModel =
+                            typeof plannerModel === "object" &&
+                            plannerModel !== null &&
+                            !Array.isArray(plannerModel) &&
+                            (plannerModel.providerID === undefined ||
+                                typeof plannerModel.providerID === "string") &&
+                            (plannerModel.model === undefined ||
+                                typeof plannerModel.model === "string") &&
+                            (plannerModel.variant === undefined ||
+                                typeof plannerModel.variant === "string") &&
+                            ((typeof plannerModel.providerID === "string" &&
+                                plannerModel.providerID.length > 0 &&
+                                typeof plannerModel.model === "string" &&
+                                plannerModel.model.length > 0) ||
+                                (plannerModel.providerID === undefined &&
+                                    plannerModel.model === undefined &&
+                                    typeof plannerModel.variant === "string" &&
+                                    plannerModel.variant.length > 0))
+
+                        if (!validStringModel && !validObjectModel) {
+                            errors.push({
+                                key: "compress.planner.model",
+                                expected:
+                                    '"provider/model#variant" | { providerID, model, variant? } | { variant }',
+                                actual: JSON.stringify(plannerModel),
+                            })
+                        }
+                    }
+                }
+            }
+
+            if (compress.background !== undefined) {
+                if (
+                    typeof compress.background !== "object" ||
+                    compress.background === null ||
+                    Array.isArray(compress.background)
+                ) {
+                    errors.push({
+                        key: "compress.background",
+                        expected: "object",
+                        actual: JSON.stringify(compress.background),
+                    })
+                } else {
+                    if (
+                        compress.background.enabled !== undefined &&
+                        typeof compress.background.enabled !== "boolean"
+                    ) {
+                        errors.push({
+                            key: "compress.background.enabled",
+                            expected: "boolean",
+                            actual: typeof compress.background.enabled,
+                        })
+                    }
+
+                    const lead = compress.background.lead
+                    if (lead !== undefined) {
+                        const isPercent = typeof lead === "string" && /^\d+(?:\.\d+)?%$/.test(lead)
+                        const percentValue = isPercent ? parseFloat(lead.slice(0, -1)) : undefined
+                        const validPercent = percentValue !== undefined && percentValue <= 100
+                        const validNumber =
+                            typeof lead === "number" && Number.isFinite(lead) && lead >= 0
+                        if (!validPercent && !validNumber) {
+                            errors.push({
+                                key: "compress.background.lead",
+                                expected: 'non-negative number | "0-100%"',
+                                actual: JSON.stringify(lead),
+                            })
+                        }
+                    }
+                }
             }
 
             if (
@@ -691,6 +834,14 @@ const defaultConfig: PluginConfig = {
         permission: "allow",
         showCompression: false,
         summaryBuffer: true,
+        planner: {
+            enabled: false,
+            variant: "low",
+        },
+        background: {
+            enabled: true,
+            lead: "15%",
+        },
         maxContextLimit: 100000,
         minContextLimit: 50000,
         nudgeFrequency: 5,
@@ -855,6 +1006,15 @@ function mergeCompress(
         permission: override.permission ?? base.permission,
         showCompression: override.showCompression ?? base.showCompression,
         summaryBuffer: override.summaryBuffer ?? base.summaryBuffer,
+        planner: {
+            enabled: override.planner?.enabled ?? base.planner?.enabled ?? false,
+            model: override.planner?.model ?? base.planner?.model,
+            variant: override.planner?.variant ?? base.planner?.variant ?? "low",
+        },
+        background: {
+            enabled: override.background?.enabled ?? base.background.enabled,
+            lead: override.background?.lead ?? base.background.lead,
+        },
         maxContextLimit: override.maxContextLimit ?? base.maxContextLimit,
         minContextLimit: override.minContextLimit ?? base.minContextLimit,
         modelMaxLimits: override.modelMaxLimits ?? base.modelMaxLimits,
@@ -922,6 +1082,16 @@ function deepCloneConfig(config: PluginConfig): PluginConfig {
         protectedFilePatterns: [...config.protectedFilePatterns],
         compress: {
             ...config.compress,
+            planner: config.compress.planner
+                ? {
+                      ...config.compress.planner,
+                      model:
+                          typeof config.compress.planner.model === "object" &&
+                          config.compress.planner.model !== null
+                              ? { ...config.compress.planner.model }
+                              : config.compress.planner.model,
+                  }
+                : undefined,
             modelMaxLimits: { ...config.compress.modelMaxLimits },
             modelMinLimits: { ...config.compress.modelMinLimits },
             protectedTools: [...config.compress.protectedTools],

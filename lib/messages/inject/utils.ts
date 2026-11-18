@@ -146,6 +146,7 @@ export function isContextOverLimits(
         modelId,
         "max",
     )
+    const baseMaxContextLimit = resolvedMaxContextLimit
     const maxContextLimit =
         resolvedMaxContextLimit === undefined
             ? undefined
@@ -159,7 +160,31 @@ export function isContextOverLimits(
     return {
         overMaxLimit,
         overMinLimit,
+        currentTokens,
+        maxContextLimit,
+        baseMaxContextLimit,
+        minContextLimit,
     }
+}
+
+export function resolveBackgroundLeadTokens(
+    lead: number | `${number}%`,
+    maxContextLimit: number | undefined,
+): number | undefined {
+    if (typeof lead === "number") {
+        return Number.isFinite(lead) ? Math.max(0, lead) : undefined
+    }
+
+    if (!lead.endsWith("%") || maxContextLimit === undefined) {
+        return undefined
+    }
+
+    const parsedPercent = parseFloat(lead.slice(0, -1))
+    if (isNaN(parsedPercent)) {
+        return undefined
+    }
+
+    return Math.round((Math.max(0, Math.min(100, parsedPercent)) / 100) * maxContextLimit)
 }
 
 export function addAnchor(

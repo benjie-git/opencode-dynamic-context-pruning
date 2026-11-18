@@ -3,6 +3,7 @@
 import { buildStatsReport } from "../commands/stats"
 import { analyzeContextTokens } from "../commands/context"
 import { compressPermission } from "../compress-permission"
+import { compactionInfo } from "../compress/planner"
 import type { PluginConfig } from "../config"
 import { saveManualModeSetting } from "../state/persistence"
 import { loadSessionData, logger } from "./data"
@@ -68,6 +69,7 @@ export function openPanelModal(api: TuiApi, config: PluginConfig) {
                 api={api}
                 manualMode={!!data.state.manualMode}
                 canCompress={compressPermission(data.state, config) !== "deny"}
+                compaction={compactionInfo(config)}
                 onContext={() => openContextModal(api, config)}
                 onStats={() => openStatsModal(api, config)}
                 onManual={(enabled) => setManualMode(api, config, data.state.sessionId, enabled)}

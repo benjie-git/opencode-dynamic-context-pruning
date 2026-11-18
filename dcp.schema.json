@@ -140,6 +140,88 @@
                     "default": "range",
                     "description": "Compression mode. 'range' compresses spans into block summaries, 'message' compresses individual raw messages."
                 },
+                "planner": {
+                    "type": "object",
+                    "description": "Optional low-variant planner that chooses what to compress and writes summaries in a separate model call. Requires OpenCode V2. When disabled, the main model writes selections and summaries inline.",
+                    "additionalProperties": false,
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Run compression planning and summaries in a separate model call."
+                        },
+                        "model": {
+                            "description": "Planner model as \"provider/model#variant\", an object with providerID and model, or { variant } to use the current session model at that level.",
+                            "oneOf": [
+                                {
+                                    "type": "string",
+                                    "pattern": "^[^/#\\s]+/[^#\\s]+(?:#[^#\\s]+)?$"
+                                },
+                                {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": ["providerID", "model"],
+                                    "properties": {
+                                        "providerID": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "model": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "variant": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        }
+                                    }
+                                },
+                                {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": ["variant"],
+                                    "properties": {
+                                        "variant": {
+                                            "type": "string",
+                                            "minLength": 1
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                        "variant": {
+                            "type": "string",
+                            "default": "low",
+                            "description": "Thinking variant for the planner when no explicit model variant is supplied. Defaults to \"low\"."
+                        }
+                    }
+                },
+                "background": {
+                    "type": "object",
+                    "description": "Precompute a compression plan before maxContextLimit is reached, then apply it when compression becomes due. Requires compress.planner.enabled.",
+                    "additionalProperties": false,
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": true,
+                            "description": "Precompute compression in the background while the context approaches maxContextLimit."
+                        },
+                        "lead": {
+                            "description": "How far below maxContextLimit precomputation starts. Accepts a token count or a percentage of the resolved max limit. Defaults to \"15%\".",
+                            "default": "15%",
+                            "oneOf": [
+                                {
+                                    "type": "number",
+                                    "minimum": 0
+                                },
+                                {
+                                    "type": "string",
+                                    "pattern": "^\\d+(?:\\.\\d+)?%$"
+                                }
+                            ]
+                        }
+                    }
+                },
                 "permission": {
                     "type": "string",
                     "enum": ["ask", "allow", "deny"],

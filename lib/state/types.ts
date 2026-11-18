@@ -111,4 +111,9 @@ export interface SessionState {
     currentTurn: number
     modelContextLimit: number | undefined
     systemPromptTokens: number | undefined
+    modelRef?: {
+        providerID: string
+        id: string
+        variant?: string
+    }
 }

@@ -1,6 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 
 import type { analyzeContextTokens } from "../commands/context"
+import type { CompactionInfo } from "../compress/planner"
+import type { BackgroundCompressionSnapshot } from "../compress/precompute"
 import { formatTokenCount } from "../ui/utils"
 import { formatDuration, formatRatio } from "./format"
 import { ActionRow, Card, DcpFrame, Metric, Progress, PromptRow, StatusPill } from "./ui"
@@ -154,6 +156,8 @@ export function PanelDialog(props: {
     manualMode: boolean
     canCompress: boolean
     blockedReason?: string
+    compaction?: CompactionInfo
+    background?: BackgroundCompressionSnapshot
     onContext: () => void
     onStats: () => void
     onManual: (enabled: boolean) => void
@@ -191,6 +195,36 @@ export function PanelDialog(props: {
                         {props.blockedReason ?? "Compression is denied by permissions."}
                     </text>
                 )}
+            </Card>
+            <Card theme={theme} title="Compaction">
+                <StatusPill
+                    theme={theme}
+                    label="Model"
+                    value={compactionValue(props.compaction)}
+                    accent={props.compaction?.enabled ? "accent" : "warning"}
+                />
+                {props.background ? (
+                    <StatusPill
+                        theme={theme}
+                        label="Background"
+                        value={backgroundValue(props.background)}
+                        accent={
+                            props.background.status === "failed"
+                                ? "warning"
+                                : props.background.status === "idle"
+                                  ? "textMuted"
+                                  : "success"
+                        }
+                    />
+                ) : null}
+                {props.background?.startsAt !== undefined ? (
+                    <StatusPill
+                        theme={theme}
+                        label="Starts at"
+                        value={`~${formatTokenCount(props.background.startsAt, true)} tokens`}
+                        accent="textMuted"
+                    />
+                ) : null}
             </Card>
             <Card theme={theme} title="Session State">
                 <ManualModeToggle
@@ -234,4 +268,18 @@ function ManualModeToggle(props: {
             </box>
         </box>
     )
+}
+
+function compactionValue(info: CompactionInfo | undefined): string {
+    if (!info) return "unavailable"
+    if (!info.enabled) return "disabled"
+    const variant = info.variant ?? "low"
+    return info.model ? `${info.model} · ${variant}` : `${variant} (current model)`
+}
+
+function backgroundValue(info: BackgroundCompressionSnapshot): string {
+    if (info.status === "idle") return "not started"
+    if (info.status === "running") return "planning"
+    if (info.status === "ready") return "plan ready"
+    return info.failures ? `failed (${info.failures}×)` : "failed"
 }

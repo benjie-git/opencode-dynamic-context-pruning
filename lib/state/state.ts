@@ -101,6 +101,7 @@ export function createSessionState(idFormat: IdFormat = "xml"): SessionState {
         currentTurn: 0,
         modelContextLimit: undefined,
         systemPromptTokens: undefined,
+        modelRef: undefined,
     }
 }
 
@@ -135,6 +136,7 @@ export function resetSessionState(state: SessionState): void {
     state.currentTurn = 0
     state.modelContextLimit = undefined
     state.systemPromptTokens = undefined
+    state.modelRef = undefined
 }
 
 export async function ensureSessionInitialized(

@@ -45,6 +45,10 @@ DCP supports two compression modes:
 
 In `range` mode, when a new compression overlaps an earlier one, the earlier summary is nested inside the new one so information is preserved through layers of compression rather than diluted away. In both modes, protected tool outputs (such as subagents and skills) and protected file patterns are kept in compression summaries, ensuring that the most important information is never lost. You can also enable `protectUserMessages` to preserve your messages verbatim during compression, though note that large prompts (e.g. copy-pasting log files in the prompt) will then never be compressed away.
 
+By default the main model chooses compression targets and writes summaries inline. On OpenCode V2 you can enable `compress.planner` to move target selection and summarization into a separate model call that defaults to the current model's `low` thinking variant (configurable via `compress.planner.variant` or an explicit `compress.planner.model`). This keeps the main high-thinking turn focused on the task while compression planning runs cheaply. In planner mode the main model may call `compress` with only a topic, or with explicit ranges/messages but no summaries.
+
+When the planner is enabled, `compress.background` (on by default) also precomputes a plan once the context comes within `lead` of `maxContextLimit`, while the conversation keeps going. Planning starts only when the session goes idle and the finished plan is applied as soon as it is ready, so neither the planner call nor the apply sits in front of a model request. `lead` therefore controls roughly when compression happens (15% below the max by default). Plans that never become ready still cost the planner call.
+
 ### Deduplication
 
 Identifies repeated tool calls (same tool, same arguments) and keeps only the most recent output. Recalculated when the compress tool runs, so prompt cache is only impacted alongside compression.
@@ -121,6 +125,27 @@ Each level overrides the previous, so project settings take priority over global
         // Compression mode: "range" (compress spans into block summaries)
         // or experimental "message" (compress individual raw messages)
         "mode": "range",
+        // Optional planner: run target selection + summaries in a separate
+        // model call using a low thinking variant. Requires OpenCode V2.
+        // The main model can then call compress with just a topic, or with
+        // explicit ranges/messages but no summaries.
+        "planner": {
+            "enabled": false,
+            // Optional model: "provider/model#variant" or
+            // { "providerID": "...", "model": "...", "variant": "low" }.
+            // Defaults to the current session model with "variant" below.
+            // "model": "deepseek/deepseek-v4.1-flash#low",
+            // Thinking variant used when no explicit model variant is given.
+            "variant": "low",
+        },
+        // Precompute a compression plan before maxContextLimit is reached,
+        // then apply it when compression becomes due. Requires the planner.
+        "background": {
+            "enabled": true,
+            // How far below maxContextLimit planning starts.
+            // Accepts a token count or "X%" of the resolved max limit.
+            "lead": "15%",
+        },
         // Permission mode: "allow" (no prompt), "ask" (prompt), "deny" (tool not registered)
         "permission": "allow",
         // Show compression content in a chat notification
