@@ -96,6 +96,11 @@ export async function setup(ctx: Plugin.Context) {
                         <text fg={theme.text}>
                             <b>DCP</b>
                         </text>
+                        <Show when={value().pendingUsageRefresh}>
+                            <text fg={theme.textMuted}>
+                                context: ~{formatTokenCount(value().effectiveTokens)}
+                            </text>
+                        </Show>
                         <text fg={theme.textMuted}>background: {value().background.status}</text>
                         <text fg={theme.textMuted}>
                             {formatTokenCount(value().savedTokens, true)} saved

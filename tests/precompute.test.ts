@@ -173,6 +173,33 @@ test("a ready plan applies compression blocks that prune materializes", async ()
     assert.doesNotMatch(text, /Investigate the release flow/)
 })
 
+test("does not start a second plan from usage that predates the applied compression", async () => {
+    const { plan, raw, state, ctx } = await readyPlan()
+    const assistant = raw[1].info as any
+    assistant.tokens = { output: 10 }
+    assistant.time = { created: 2 }
+
+    const searchContext = buildSearchContext(state, raw)
+    const resolved = resolveRanges(
+        { topic: plan.topic, content: plan.entries as any },
+        searchContext,
+        state,
+    )
+    await applyResolvedRangeCompression(ctx as any, searchContext, plan.topic, resolved, {})
+
+    assert.equal(
+        startBackgroundCompression({
+            ctx: ctx as any,
+            sessionID,
+            messages: raw,
+            searchContext: buildSearchContext(state, raw),
+            modelKey: "anthropic/claude-test",
+            currentTokens: 130000,
+        }),
+        false,
+    )
+})
+
 test("applies only the planned chunks and keeps turns added while planning", async () => {
     const { plan, raw, state, ctx } = await readyPlan()
     const extended = [

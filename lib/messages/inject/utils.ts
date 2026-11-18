@@ -21,6 +21,7 @@ import {
 import { getLastUserMessage, isIgnoredUserMessage } from "../query"
 import { getCurrentTokenUsage } from "../../token-utils"
 import { getActiveSummaryTokenUsage } from "../../state/utils"
+import { effectiveContextTokens } from "../../compress/estimate"
 
 const MESSAGE_MODE_NUDGE_PRIORITY: MessagePriority = "high"
 
@@ -156,11 +157,16 @@ export function isContextOverLimits(
 
     const overMaxLimit = maxContextLimit === undefined ? false : currentTokens > maxContextLimit
     const overMinLimit = minContextLimit === undefined ? true : currentTokens >= minContextLimit
+    // Provider usage lags behind compression applied after the response. Use the
+    // estimated size of the next request when deciding whether another compression
+    // is needed.
+    const effectiveTokens = effectiveContextTokens(currentTokens, state, messages)
 
     return {
         overMaxLimit,
         overMinLimit,
         currentTokens,
+        effectiveTokens,
         maxContextLimit,
         baseMaxContextLimit,
         minContextLimit,

@@ -14,7 +14,11 @@ import {
     takeDueBackgroundCompression,
 } from "../compress/precompute"
 import { applyResolvedMessageCompression, applyResolvedRangeCompression } from "../compress/apply"
-import { activeCompressionSavings, effectiveContextTokens } from "../compress/estimate"
+import {
+    activeCompressionSavings,
+    compressionSinceUsage,
+    effectiveContextTokens,
+} from "../compress/estimate"
 import { buildSearchContext } from "../compress/search"
 import { resolveRanges, validateNonOverlapping } from "../compress/range-utils"
 import { resolveMessages } from "../compress/message-utils"
@@ -306,7 +310,7 @@ export async function setup(ctx: Plugin.Context) {
                     )
                     if (
                         usage.baseMaxContextLimit !== undefined &&
-                        usage.currentTokens >= usage.baseMaxContextLimit - (lead ?? 0)
+                        usage.effectiveTokens >= usage.baseMaxContextLimit - (lead ?? 0)
                     ) {
                         // Do not depend on the idle hook: it may not run for this session
                         // (or may fail to load it), which previously left the session
@@ -317,7 +321,7 @@ export async function setup(ctx: Plugin.Context) {
                             messages,
                             buildSearchContext(state, messages),
                             modelKey,
-                            usage.currentTokens,
+                            usage.effectiveTokens,
                         )
                     }
                 }
@@ -505,7 +509,7 @@ export async function setup(ctx: Plugin.Context) {
 
         const overBaseMax =
             usage.baseMaxContextLimit !== undefined &&
-            usage.currentTokens > usage.baseMaxContextLimit
+            usage.effectiveTokens > usage.baseMaxContextLimit
         if (usage.overMaxLimit || overBaseMax) {
             if (await applyBackgroundPlan(sessionID, state, messages, modelKey)) return
             // Over-limit sessions are past the lead window by definition. Start planning
@@ -517,7 +521,7 @@ export async function setup(ctx: Plugin.Context) {
                 messages,
                 searchContext: buildSearchContext(state, messages),
                 modelKey,
-                currentTokens: usage.currentTokens,
+                currentTokens: usage.effectiveTokens,
                 onReady: () => {
                     void serial(sessionID, () => applyReadyBackgroundCompression(sessionID))
                 },
@@ -531,7 +535,7 @@ export async function setup(ctx: Plugin.Context) {
             usage.baseMaxContextLimit,
         )
         if (lead === undefined) return
-        if (usage.currentTokens < usage.baseMaxContextLimit - lead) return
+        if (usage.effectiveTokens < usage.baseMaxContextLimit - lead) return
         startBackgroundCompression(due)
     }
 
@@ -699,6 +703,7 @@ export async function setup(ctx: Plugin.Context) {
                 const context = analyzeContextTokens(state, messages)
                 const effectiveTokens = effectiveContextTokens(context.total, state, messages)
                 const savedTokens = activeCompressionSavings(state)
+                const pendingUsageRefresh = compressionSinceUsage(state, messages)
                 const usage = isContextOverLimits(
                     config,
                     state,
@@ -722,10 +727,11 @@ export async function setup(ctx: Plugin.Context) {
                     compaction: compactionInfo(config),
                     background: {
                         ...backgroundCompressionStatus(sessionID),
-                        currentTokens: usage.currentTokens,
+                        currentTokens: usage.effectiveTokens,
                         ...(startsAt !== undefined ? { startsAt } : {}),
                     },
                     effectiveTokens,
+                    pendingUsageRefresh,
                     savedTokens,
                     context,
                     stats: await buildStatsReport(state, logger),

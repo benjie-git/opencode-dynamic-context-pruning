@@ -27,6 +27,21 @@ export function activeCompressionSavings(state: SessionState, since = 0): number
 }
 
 /**
+ * Whether a compression block was applied after the last provider usage report.
+ * The reported usage is then stale until the next assistant response, so another
+ * background plan must not be started from it.
+ */
+export function compressionSinceUsage(state: SessionState, messages: WithParts[]): boolean {
+    const since = lastUsageCreated(messages)
+    if (since === undefined) return false
+    for (const blockId of state.prune.messages.activeBlockIds) {
+        const block = state.prune.messages.blocksById.get(blockId)
+        if (block?.active && block.createdAt > since) return true
+    }
+    return false
+}
+
+/**
  * Estimate of the context the next request will use. The last provider usage is
  * authoritative, minus compression that was applied after that response.
  */

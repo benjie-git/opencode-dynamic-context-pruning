@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
     activeCompressionSavings,
+    compressionSinceUsage,
     effectiveContextTokens,
     lastUsageCreated,
 } from "../lib/compress/estimate"
@@ -80,4 +81,14 @@ test("effectiveContextTokens subtracts compression applied after the last usage"
 test("effectiveContextTokens falls back to the provider total without usage", () => {
     const state = stateWith([{ id: 1, compressed: 5000, summary: 500, createdAt: 1000 }])
     assert.equal(effectiveContextTokens(20000, state, []), 20000)
+})
+
+test("compressionSinceUsage detects compression applied after the last provider report", () => {
+    const state = stateWith([
+        { id: 1, compressed: 5000, summary: 500, createdAt: 1000 },
+        { id: 2, compressed: 3000, summary: 1000, createdAt: 2000 },
+    ])
+    assert.equal(compressionSinceUsage(state, messagesWithUsage(1500)), true)
+    assert.equal(compressionSinceUsage(state, messagesWithUsage(2500)), false)
+    assert.equal(compressionSinceUsage(state, []), false)
 })

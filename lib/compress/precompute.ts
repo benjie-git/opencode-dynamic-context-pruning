@@ -1,6 +1,7 @@
 import type { PluginConfig } from "../config"
 import type { CompressionMode, WithParts } from "../state"
 import { isIgnoredUserMessage } from "../messages/query"
+import { compressionSinceUsage } from "./estimate"
 import { planAutoMessageCompression, planAutoRangeCompression } from "./planner"
 import type { CompressMessageEntry, CompressRangeEntry, SearchContext, ToolContext } from "./types"
 
@@ -95,6 +96,12 @@ export function startBackgroundCompression(input: StartBackgroundCompressionInpu
         return false
     }
     if (ctx.state.manualMode) {
+        return false
+    }
+    // The provider count predates the compression just applied, so it would look
+    // over budget and immediately trigger a second plan. Wait for the next response
+    // to report the real size before planning again.
+    if (compressionSinceUsage(ctx.state, input.messages)) {
         return false
     }
 

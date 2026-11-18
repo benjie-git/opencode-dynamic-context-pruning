@@ -55,6 +55,7 @@ export const rpc = {
                 compaction,
                 background,
                 effectiveTokens: z.number(),
+                pendingUsageRefresh: z.boolean(),
                 savedTokens: z.number(),
                 context,
                 stats,
