@@ -9,11 +9,11 @@
 > - **Background compaction** — with `compress.planner` enabled, a compression plan is precomputed in the background as the context approaches the limit, instead of blocking the next model request. See `compress.background`.
 > - **Configurable compaction model and thinking level** — `compress.planner.model` and `compress.planner.variant` choose which model and thinking variant select compression targets and write summaries, so compaction can run on something cheaper than the main session model.
 >
-> The install command below refers to the upstream npm package; install this fork from its
-> GitHub repository instead.
+> The original project was created by [Dan Smolsky (@Tarquinen)](https://github.com/Tarquinen);
+> see [upstream](https://github.com/Tarquinen/opencode-dynamic-context-pruning) for its
+> documentation and release history.
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/dansmolsky)
-[![npm version](https://img.shields.io/npm/v/@tarquinen/opencode-dcp.svg)](https://www.npmjs.com/package/@tarquinen/opencode-dcp)
+[![GitHub](https://img.shields.io/badge/GitHub-benjie--git%2Fopencode--dynamic--context--pruning-blue?logo=github)](https://github.com/benjie-git/opencode-dynamic-context-pruning)
 
 Automatically reduces token usage in OpenCode by managing conversation context.
 
@@ -21,26 +21,17 @@ Automatically reduces token usage in OpenCode by managing conversation context.
 
 ## Installation
 
-Install from the OpenCode V2 CLI:
+Install this fork from the OpenCode V2 CLI:
 
 ```bash
-opencode plugin add @tarquinen/opencode-dcp@latest
+opencode plugin add github:benjie-git/opencode-dynamic-context-pruning
 ```
 
-This installs the package and adds it to your global OpenCode config.
+This installs the plugin from this repository and adds it to your global OpenCode config. To follow a specific branch or tag, append it after `#`, for example `github:benjie-git/opencode-dynamic-context-pruning#master`.
 
 ## Project Status
 
-Development on DCP has slowed because most new context-management work has moved to [Sleev](https://sleev.ai) and the `sleev` CLI.
-
-Sleev builds on DCP's core ideas with more advanced context management and significantly better performance. It's a local proxy that already supports Claude Code, Codex, OpenCode, Pi, and Hermes, and can be extended to support any harness.
-
-DCP remains available for OpenCode plugin users, but new features are landing in Sleev first. If you are starting fresh, we recommend trying Sleev:
-
-```bash
-npm i -g sleev
-sleev
-```
+Upstream DCP development has slowed because most new context-management work has moved to [Sleev](https://sleev.ai) and the `sleev` CLI, which builds on DCP's core ideas with more advanced context management. This fork continues to be maintained by [@benjie-git](https://github.com/benjie-git) and periodically merges changes from upstream.
 
 ## How It Works
 
@@ -90,7 +81,7 @@ Each level overrides the previous, so project settings take priority over global
 
 ```jsonc
 {
-    "$schema": "https://raw.githubusercontent.com/Opencode-DCP/opencode-dynamic-context-pruning/master/dcp.schema.json",
+    "$schema": "https://raw.githubusercontent.com/benjie-git/opencode-dynamic-context-pruning/master/dcp.schema.json",
     // Enable or disable the plugin
     "enabled": true,
     // Automatically update npm-installed DCP when a newer npm latest is available.
