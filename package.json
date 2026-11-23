@@ -1,6 +1,6 @@
 {
     "$schema": "https://json.schemastore.org/package.json",
-    "name": "@tarquinen/opencode-dcp",
+    "name": "@benjie-git/opencode-dcp",
     "version": "3.2.1",
     "type": "module",
     "workspaces": [
@@ -48,13 +48,19 @@
     ],
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/Tarquinen/opencode-dynamic-context-pruning.git"
+        "url": "git+https://github.com/benjie-git/opencode-dynamic-context-pruning.git"
     },
     "bugs": {
-        "url": "https://github.com/Tarquinen/opencode-dynamic-context-pruning/issues"
+        "url": "https://github.com/benjie-git/opencode-dynamic-context-pruning/issues"
     },
-    "homepage": "https://github.com/Tarquinen/opencode-dynamic-context-pruning#readme",
-    "author": "tarquinen",
+    "homepage": "https://github.com/benjie-git/opencode-dynamic-context-pruning#readme",
+    "author": "benjie-git (https://github.com/benjie-git)",
+    "contributors": [
+        {
+            "name": "Dan Smolsky",
+            "url": "https://github.com/Tarquinen"
+        }
+    ],
     "license": "AGPL-3.0-or-later",
     "peerDependencies": {
         "@opencode-ai/plugin": ">=1.18.29"

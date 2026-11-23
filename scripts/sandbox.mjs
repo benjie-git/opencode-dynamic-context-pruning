@@ -196,8 +196,8 @@ async function main() {
             major,
             dcp:
                 dcp === "local"
-                    ? "/lab/plugins/node_modules/@tarquinen/opencode-dcp"
-                    : `@tarquinen/opencode-dcp@${dcp}`,
+                    ? "/lab/plugins/node_modules/@benjie-git/opencode-dcp"
+                    : `@benjie-git/opencode-dcp@${dcp}`,
             packages,
             stamp,
             args: cli,
@@ -205,7 +205,9 @@ async function main() {
         console.log(
             `OpenCode ${release} · ${settings.model || "default model"} · ${settings.transport || "provider transport"}`,
         )
-        console.log(`DCP: ${dcp === "local" ? "local checkout" : `@tarquinen/opencode-dcp@${dcp}`}`)
+        console.log(
+            `DCP: ${dcp === "local" ? "local checkout" : `@benjie-git/opencode-dcp@${dcp}`}`,
+        )
         console.log(`Workspace: ${join(home, "project")}`)
         console.log(`DCP config: ${join(home, "home/config/opencode/dcp.jsonc")}`)
         console.log(`Readable logs: ${join(home, "logs", stamp, "readable")}`)

@@ -131,7 +131,7 @@ applies to the selected model.
 Add `--v1` to manage the V1 sandbox. Model and transport choices persist.
 An exact version override applies only to that launch; otherwise the latest stable
 release is selected. `--fresh` selects a new profile for subsequent launches.
-`--dcp VERSION` uses `@tarquinen/opencode-dcp@VERSION` through OpenCode's npm plugin
+`--dcp VERSION` uses `@benjie-git/opencode-dcp@VERSION` through OpenCode's npm plugin
 loader instead of building local DCP. It accepts npm versions, tags, and ranges on
 both V1 and V2. The test logger is still built locally. The DCP choice applies only
 to that launch; omit it or use `--dcp local` to return to the checkout.
