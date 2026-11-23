@@ -1,5 +1,17 @@
 # Dynamic Context Pruning Plugin
 
+> [!NOTE]
+> **This is a personal fork** of
+> [Tarquinen/opencode-dynamic-context-pruning](https://github.com/Tarquinen/opencode-dynamic-context-pruning),
+> maintained at [benjie-git/opencode-dynamic-context-pruning](https://github.com/benjie-git/opencode-dynamic-context-pruning).
+> It tracks upstream, with these additions:
+>
+> - **Background compaction** — with `compress.planner` enabled, a compression plan is precomputed in the background as the context approaches the limit, instead of blocking the next model request. See `compress.background`.
+> - **Configurable compaction model and thinking level** — `compress.planner.model` and `compress.planner.variant` choose which model and thinking variant select compression targets and write summaries, so compaction can run on something cheaper than the main session model.
+>
+> The install command below refers to the upstream npm package; install this fork from its
+> GitHub repository instead.
+
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/dansmolsky)
 [![npm version](https://img.shields.io/npm/v/@tarquinen/opencode-dcp.svg)](https://www.npmjs.com/package/@tarquinen/opencode-dcp)
 
