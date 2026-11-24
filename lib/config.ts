@@ -835,7 +835,7 @@ const defaultConfig: PluginConfig = {
         showCompression: false,
         summaryBuffer: true,
         planner: {
-            enabled: false,
+            enabled: true,
             variant: "low",
         },
         background: {
@@ -1007,7 +1007,7 @@ function mergeCompress(
         showCompression: override.showCompression ?? base.showCompression,
         summaryBuffer: override.summaryBuffer ?? base.summaryBuffer,
         planner: {
-            enabled: override.planner?.enabled ?? base.planner?.enabled ?? false,
+            enabled: override.planner?.enabled ?? base.planner?.enabled ?? true,
             model: override.planner?.model ?? base.planner?.model,
             variant: override.planner?.variant ?? base.planner?.variant ?? "low",
         },

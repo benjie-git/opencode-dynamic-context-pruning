@@ -142,12 +142,12 @@
                 },
                 "planner": {
                     "type": "object",
-                    "description": "Optional low-variant planner that chooses what to compress and writes summaries in a separate model call. Requires OpenCode V2. When disabled, the main model writes selections and summaries inline.",
+                    "description": "Low-variant planner that chooses what to compress and writes summaries in a separate model call. Requires OpenCode V2. When disabled, the main model writes selections and summaries inline.",
                     "additionalProperties": false,
                     "properties": {
                         "enabled": {
                             "type": "boolean",
-                            "default": false,
+                            "default": true,
                             "description": "Run compression planning and summaries in a separate model call."
                         },
                         "model": {
