@@ -49,7 +49,7 @@ try {
 
     run("npm", ["run", "check:package"])
     run("git", ["add", "-f", "dist"])
-    run("git", ["commit", "-m", `build: ${source}`])
+    run("git", ["commit", "--quiet", "-m", `build: ${source}`])
 
     const release = git("rev-parse", "--short", "HEAD")
     if (noPush) {
