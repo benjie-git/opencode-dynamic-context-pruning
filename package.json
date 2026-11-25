@@ -28,6 +28,7 @@
         "build": "npm run clean && tsup && tsc --emitDeclarationOnly",
         "verify:package": "node scripts/verify-package.mjs",
         "check:package": "npm run build && npm run verify:package",
+        "release:branch": "node scripts/release-branch.mjs",
         "prepublishOnly": "npm run check:package",
         "dev": "opencode plugin dev",
         "sandbox": "node scripts/sandbox.mjs",

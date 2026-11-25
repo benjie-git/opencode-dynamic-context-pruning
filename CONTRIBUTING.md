@@ -45,6 +45,19 @@ npm run check:package     # Build and validate the npm package
 npm run format:check      # Formatting
 ```
 
+## Release Branch
+
+The `release` branch is a built snapshot of `master` used for Git installs. From a
+clean `master` checkout:
+
+```sh
+npm run release:branch
+```
+
+This runs `check:package`, commits the generated `dist/` to a new `release` commit,
+and force-pushes `origin/release`. Use `npm run release:branch -- --no-push` to
+update only the local branch.
+
 ## Compatibility
 
 DCP provides server and terminal integrations for OpenCode V1 and V2, using shared

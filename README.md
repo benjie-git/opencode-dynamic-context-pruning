@@ -27,7 +27,13 @@ Install this fork from the OpenCode V2 CLI:
 opencode plugin add github:benjie-git/opencode-dynamic-context-pruning#release
 ```
 
-The `release` branch is rebuilt from `master` by CI and includes the compiled `dist/` output, so no local clone or build is required. To pin a specific build, use a commit or tag instead of `#release`. To update a branch install after a new build, run `opencode plugin update`, or remove and re-add the plugin.
+The `release` branch is a built snapshot of `master` and includes the compiled `dist/` output, so no local clone or build is required. Maintainers refresh it manually from a clean `master` checkout:
+
+```bash
+npm run release:branch
+```
+
+This builds and verifies the package, commits `dist/` to `release`, and force-pushes that branch to `origin`. To pin a specific build, use a commit or tag instead of `#release`. To update a branch install after a new build, run `opencode plugin update`, or remove and re-add the plugin.
 
 ## Project Status
 
