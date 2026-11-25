@@ -24,10 +24,10 @@ Automatically reduces token usage in OpenCode by managing conversation context.
 Install this fork from the OpenCode V2 CLI:
 
 ```bash
-opencode plugin add github:benjie-git/opencode-dynamic-context-pruning
+opencode plugin add github:benjie-git/opencode-dynamic-context-pruning#release
 ```
 
-This installs the plugin from this repository and adds it to your global OpenCode config. To follow a specific branch or tag, append it after `#`, for example `github:benjie-git/opencode-dynamic-context-pruning#master`.
+The `release` branch is rebuilt from `master` by CI and includes the compiled `dist/` output, so no local clone or build is required. To pin a specific build, use a commit or tag instead of `#release`. To update a branch install after a new build, run `opencode plugin update`, or remove and re-add the plugin.
 
 ## Project Status
 
