@@ -168,9 +168,30 @@ function findPackageInfo(packageName, importerPath) {
     }
 }
 
+function hasImportCondition(value) {
+    if (!value || typeof value !== "object") return false
+    if (Array.isArray(value)) return value.some(hasImportCondition)
+    if (Object.prototype.hasOwnProperty.call(value, "import")) return true
+    return Object.values(value).some(hasImportCondition)
+}
+
 function packageLooksCommonJs(pkg) {
     if (!pkg) return false
     if (pkg.type === "commonjs") return true
+
+    const rootExport =
+        typeof pkg.exports === "string"
+            ? pkg.exports
+            : pkg.exports && typeof pkg.exports === "object"
+              ? (pkg.exports["."] ?? pkg.exports)
+              : undefined
+
+    // `require.resolve` picks the CJS condition, but ESM consumers use the
+    // package's `import` condition when one exists.
+    if (pkg.type === "module" && rootExport !== undefined) {
+        if (typeof rootExport === "string") return rootExport.endsWith(".cjs")
+        if (hasImportCondition(rootExport)) return false
+    }
 
     const main = typeof pkg.main === "string" ? pkg.main : ""
     return /(?:^|\/)(cjs|umd)(?:\/|$)/.test(main) || main.endsWith(".cjs")
