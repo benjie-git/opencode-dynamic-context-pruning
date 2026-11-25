@@ -58,6 +58,10 @@ This runs `check:package`, commits the generated `dist/` to a new `release` comm
 and force-pushes `origin/release`. Use `npm run release:branch -- --no-push` to
 update only the local branch.
 
+The release commit removes build-only `scripts`, `workspaces`, and
+`devDependencies` from `package.json`. The branch already contains `dist/`, and
+OpenCode's Git installer otherwise tries to run a full npm build in the clone.
+
 ## Compatibility
 
 DCP provides server and terminal integrations for OpenCode V1 and V2, using shared
