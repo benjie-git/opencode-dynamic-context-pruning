@@ -3,9 +3,6 @@
     "name": "@benjie-git/opencode-dcp",
     "version": "3.2.1",
     "type": "module",
-    "workspaces": [
-        "tests/logger"
-    ],
     "description": "OpenCode plugin that optimizes token usage by pruning obsolete tool outputs from conversation context",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
@@ -22,21 +19,6 @@
             "types": "./dist/tui.d.ts",
             "import": "./tui.tsx"
         }
-    },
-    "scripts": {
-        "clean": "rm -rf dist",
-        "build": "npm run clean && tsup && tsc --emitDeclarationOnly",
-        "verify:package": "node scripts/verify-package.mjs",
-        "check:package": "npm run build && npm run verify:package",
-        "release:branch": "node scripts/release-branch.mjs",
-        "prepublishOnly": "npm run check:package",
-        "dev": "opencode plugin dev",
-        "sandbox": "node scripts/sandbox.mjs",
-        "typecheck": "tsc --noEmit && npm run typecheck --workspace=tests/logger",
-        "test": "node --import tsx --test tests/*.test.ts && npm test --workspace=tests/logger",
-        "format": "prettier --write .",
-        "format:check": "prettier --check .",
-        "dcp": "tsx scripts/print.ts"
     },
     "keywords": [
         "opencode",
@@ -73,16 +55,6 @@
         "@opentui/solid": "^0.4.5",
         "jsonc-parser": "^3.3.1",
         "solid-js": "^1.9.12"
-    },
-    "devDependencies": {
-        "@opencode-ai/plugin": "^1.18.29",
-        "@opencode/plugin": "^2.0.4",
-        "@opencode/theme": "^2.0.4",
-        "@types/node": "^25.5.0",
-        "prettier": "^3.8.1",
-        "tsup": "^8.5.1",
-        "tsx": "^4.21.0",
-        "typescript": "^6.0.2"
     },
     "overrides": {
         "@babel/core": "7.29.7",
